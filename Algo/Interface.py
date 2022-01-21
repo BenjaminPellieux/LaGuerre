@@ -20,7 +20,7 @@ class Case():
         self.posx=x
         self.posy=y
         self.liens=set()
-        #self.case_function
+        self.case_function=None 
 
         
 
@@ -136,6 +136,10 @@ class Game():
                 for unite in joueur.listUnite[i]:
                     if not unite:
                         continue
+                    #TODO : ajout fonction de la case : /2 unite *2 unite   
+                    
+                    
+                    
                     ##ATTAQUE 
                     
                     uniteEnnemie= self.verifierEnnemie(unite,(unite.posx,unite.posy))
