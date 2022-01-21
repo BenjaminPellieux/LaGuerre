@@ -2,9 +2,10 @@ import pygame, sys, string
 from pygame.locals import *
 from random import randint
 
-NBJOUEUR=2
-NBCASES=10
+NBJOUEUR=3
+NBCASES=5
 HEIGHT=1000
+BASE_UNITE_SIZE=12
 WIDTH=HEIGHT+400
 WHITE=(255,255,255)
 BLUE=(0,100,255)
@@ -21,17 +22,6 @@ class Case():
         self.liens=set()
         #self.case_function
 
-    def getLienById(self,parid:int): 
-        for lien in self.liens:
-            if lien.id==parid:
-                return lien          
-        return None
-
-    def getLienByPosTo(self,pos:tuple):
-        for lien in self.liens:
-            if (lien.toCase.posx,lien.toCase.posy)==pos:
-                return lien          
-        return None
         
 
 class Lien():
@@ -64,15 +54,17 @@ class Joueur():
         self.nom=parnom
         self.color=parcolor
         self.pos=parpos
-        self.nbUnite=12
-        self.listUnite={Unite(0,parpos,self.nbUnite)}
+        self.nbUnite=BASE_UNITE_SIZE
+        self.listUnite=[[None for j in range(self.nbcase)] for i in range(self.nbcase)]
+        self.listUnite[parpos[0]][parpos[1]]=Unite(0,parpos,self.nbUnite)
 
-    def getUniteByPos(self,pos:tuple)->Unite:
-        for unite in self.listUnite:
-            if (unite.posx,unite.posy) ==pos:
-                return unite
-        return None
 
+    def getUniteById(self,idUnite:int):
+        for i in range(self.nbcase):
+            for unite in self.listUnite[i]:
+                if unite and  unite.id==idUnite:
+                    return unite
+        return None 
 
 class Game():
     def __init__(self,nbcases:int,nbjoueur:int):
@@ -88,41 +80,48 @@ class Game():
         self.size_lien=(0.35*(HEIGHT-40))/self.nblien
         self.size_case=(0.65*(HEIGHT-40))/self.nbcases
         
-        self.joueurs=[Joueur(i,"Player "+str(i+1),self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(self.nbjoueur)]
-        self.cases=set()
+        self.joueurs=[Joueur(i,f"Player {i+1}",self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(self.nbjoueur)]
+        self.cases=[[None for j in range(self.nbcases)] for i in range(self.nbcases)]
         self.createCases()
         self.createLiens()
  
     def createCases(self):
         for i in range(self.nbcases*self.nbcases):
-            self.cases.add(Case(i,i%self.nbcases,i//self.nbcases))
+            self.cases[i%self.nbcases][i//self.nbcases]=Case(i,i%self.nbcases,i//self.nbcases)
+
     
     def createLiens(self):
-        for thecase in self.cases:
-            voisin=set([(thecase.posx+k[0],thecase.posy+k[1])  for k in [(-1,0),(0,-1),(1,0),(0,1)]])
-            for case in self.cases:
-                if (case.posx,case.posy) in voisin:
-                    thecase.liens.add(Lien(thecase,case))
-
-    def moveUnite(self,idJoueur:int,parsize:int,posfrom:tuple,direction:string):
-        print(f"DEBUG: moveUnite {idJoueur=} {posfrom=} {direction=}")
-        unite=self.joueurs[idJoueur].getUniteByPos(posfrom)
-        if unite:
-            
+        for ligne in range(self.nbcases):
+            for thecase in self.cases[ligne]:                
+                voisins=([(thecase.posx+k[0],thecase.posy+k[1])  for k in [(-1,0),(0,-1),(1,0),(0,1)]])
+                for voisin in voisins:
+                    if -1<voisin[0]<self.nbcases and -1<voisin[1]<self.nbcases:
+                        if self.cases[voisin[0]][voisin[1]]:
+                            thecase.liens.add(Lien(thecase,self.cases[voisin[0]][voisin[1]]))
+        
+    def moveUnite(self,idJoueur:int,parsize:int,idUnite:int,direction:string):
+        #unite=self.joueurs[idJoueur].listUnite[posfrom[0]][posfrom[1]]
+        unite=self.joueurs[idJoueur].getUniteById(idUnite)
+        
+        
+        #getUniteByPos(posfrom)
+        if unite:   
+            posfrom=(unite.posx,unite.posy)
             newpos=self.getNewPos(posfrom,direction)
             if self.verifierLien(posfrom,newpos):   
-
                 if parsize<=unite.size:
-                    newpos_unite=self.joueurs[idJoueur].getUniteByPos(newpos)
+                    newpos_unite=self.joueurs[idJoueur].listUnite[newpos[0]][newpos[1]]
+                    
+                    #getUniteByPos(newpos)
                     unite.size-=parsize
                     if newpos_unite:
                         newpos_unite.size+=parsize
                     else: 
                         newUnite=Unite(len(self.joueurs[idJoueur].listUnite),newpos,parsize)
-                        self.joueurs[idJoueur].listUnite.add(newUnite)
+                        self.joueurs[idJoueur].listUnite[newpos[0]][newpos[1]]=newUnite
 
                     if unite.size==0:
-                        self.joueurs[idJoueur].listUnite.remove(unite)
+                        self.joueurs[idJoueur].listUnite[unite.posx][unite.posy]=None
 
                 else: print("ERROR: PAS ASSEZ DE SOLDAT")
             else: print("ERROR: LIEN INUTILISABLE")
@@ -148,11 +147,9 @@ class Game():
 
 
     def verifierLien(self,depart:tuple,newpos:tuple)->bool:
-        for case in self.cases:
-            if (case.posx,case.posy)==depart:
-                lien=case.getLienByPosTo(newpos)
-                if lien:
-                    return lien.enable
+        for lien in self.cases[depart[0]][depart[1]].liens:
+            if (lien.toCase.posx,lien.toCase.posy)==newpos:
+                return lien.enable
         return None 
 
 class Interface(Game):
@@ -201,44 +198,52 @@ class Interface(Game):
 
 
     def affichageJoueur(self):
-        for joueur in self.joueurs:  
-            for unite in joueur.listUnite:
-                x=(20+unite.posx*(self.size_case+self.size_lien))+self.size_case/2
-                y=(20+unite.posy*(self.size_case+self.size_lien))+self.size_case/2
-                pygame.draw.circle(self.display, joueur.color, (x, y), (self.size_case)*0.5,int(self.size_case*0.5)) 
-                self.display.blit(self.font_unite.render(str(unite.size),1,BLACK), (x-(self.size_case/3) , (y-(self.size_case/4))))
+        for joueur in self.joueurs:
+            for i in range(self.nbcases):
+                for unite in joueur.listUnite[i]:
+                    if not unite:
+                        continue
+
+                    x=(20+unite.posx*(self.size_case+self.size_lien))+self.size_case/2
+                    y=(20+unite.posy*(self.size_case+self.size_lien))+self.size_case/2
+                    pygame.draw.circle(self.display, joueur.color, (x, y), (self.size_case)*0.5,int(self.size_case*0.5)) 
+                    self.display.blit(self.font_unite.render(str(unite.size),1,BLACK), (x-(self.size_case/3) , (y-(self.size_case/4))))
 
 
             self.display.blit(self.font.render(str(joueur.nom)+" :  "+str(joueur.nbUnite),1,joueur.color), ((WIDTH-300), 200*(joueur.id+1)))
 
     def affchageDamier(self):
         self.display.fill(WHITE)
-        for case in self.cases:
-            x=(20+case.posx*(self.size_case+self.size_lien))
-            y=(20+case.posy*(self.size_case+self.size_lien))
-            pygame.draw.rect(self.display,BLUE,(x,y,self.size_case,self.size_case))
-            #for lien in case.listLien:
-            tmp=(x,y)
-            for lien in case.liens:
-                x,y=tmp
-                #W
-                if lien.direction==[-1,0]:
-                    x-=self.size_lien
-                    y+=((self.size_case/2)-(self.size_lien*lien.width[1]/2))
-                #E
-                elif lien.direction==[1,0]:
-                    x+=self.size_case
-                    y+=((self.size_case/2)-(self.size_lien*lien.width[1]/2))
-                #UP
-                elif lien.direction==[0,-1]:
-                    x+=((self.size_case/2)-(self.size_lien*lien.width[0]/2))
-                    y-=self.size_lien
-                #DOWN
-                elif lien.direction==[0,+1]:
-                    x+=((self.size_case/2)-(self.size_lien*lien.width[0]/2))
-                    y+=self.size_case
+        for i in range(self.nbcases):
+            for case in self.cases[i]:
+                if not case:
+                    continue
 
-                pygame.draw.rect(self.display,RED,(x,y,self.size_lien*lien.width[0],self.size_lien*lien.width[1]))
+                x=(20+case.posx*(self.size_case+self.size_lien))
+                y=(20+case.posy*(self.size_case+self.size_lien))
+                pygame.draw.rect(self.display,BLUE,(x,y,self.size_case,self.size_case))
+                #for lien in case.listLien:
+                tmp=(x,y)
+                for lien in case.liens:
+                    x,y=tmp
+                    #W
+                    if lien.direction==[-1,0]:
+                        x-=self.size_lien
+                        y+=((self.size_case/2)-(self.size_lien*lien.width[1]/2))
+                    #E
+                    elif lien.direction==[1,0]:
+                        x+=self.size_case
+                        y+=((self.size_case/2)-(self.size_lien*lien.width[1]/2))
+                    #UP
+                    elif lien.direction==[0,-1]:
+                        x+=((self.size_case/2)-(self.size_lien*lien.width[0]/2))
+                        y-=self.size_lien
+                    #DOWN
+                    elif lien.direction==[0,+1]:
+                        x+=((self.size_case/2)-(self.size_lien*lien.width[0]/2))
+                        y+=self.size_case
+
+                    pygame.draw.rect(self.display,RED,(x,y,self.size_lien*lien.width[0],self.size_lien*lien.width[1]))
 
 #ZONE TEST
 class TEST():
@@ -250,25 +255,21 @@ class TEST():
         #print("TEST: tour:",nb_tour)
         # N , S ,E, W
         if nb_tour==0:
-            self.game.moveUnite(0,5,(0, 0),"E")
-            self.game.moveUnite(1,5,(self.size_map-1,self.size_map-1),"E")
+            self.game.moveUnite(0,5,0,"E")
+            self.game.moveUnite(1,5,0,"E")
         elif nb_tour==1:
-            self.game.moveUnite(1,5,(self.size_map-1,self.size_map-1),"W")
-            self.game.moveUnite(0,5,(0, 0),"E")
+            self.game.moveUnite(1,5,0,"W")
+            self.game.moveUnite(0,5,0,"E")
         elif nb_tour==3:
-            self.game.moveUnite(0,1,(0, 0),"E")
-            self.game.moveUnite(1,3,(self.size_map-1,self.size_map-1),"W")
+            self.game.moveUnite(0,1,0,"E")
+            self.game.moveUnite(1,3,0,"W")
         elif nb_tour==4:
-            self.game.moveUnite(1,4,(self.size_map-1,self.size_map-1),"W")
+            self.game.moveUnite(1,4,0,"W")
 
         elif nb_tour==4:
-            self.game.moveUnite(1,4,(self.size_map-1,self.size_map-1),"W")
+            self.game.moveUnite(1,4,0,"W")
 
         #else:self.game.pause=True
-
-
-
-
 
 
 
