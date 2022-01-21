@@ -72,20 +72,22 @@ class Unite(Joueur):
         #self.case=Game().getCase(parpos)
 
 class Game():
-    def __init__(self,nbcases:int,nbjoueur:int):
-        if nbjoueur>4:
-            print("ERROR: TROP DE JOUEURS")
+    def __init__(self):
 
-        self.nbcases=nbcases
-        self.nbjoueur=nbjoueur
+        self.nbcases=NBCASES
+        self.nbjoueur=NBJOUEUR
         self.positionJoueur=[(0,0),(self.nbcases-1,self.nbcases-1),(self.nbcases-1,0),(0,self.nbcases-1)]
         self.colorJoueur=[(0,255,0),(255, 160, 122),(240, 15, 220),(0,0,0)]
-
-        self.nblien=nbcases-1
+        self.nblien=self.nbcases-1
         self.size_lien=(0.35*(HEIGHT-40))/self.nblien
         self.size_case=(0.65*(HEIGHT-40))/self.nbcases
         
-        self.joueurs=[Joueur(i,f"Player {i+1}",self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(self.nbjoueur)]
+
+        self.serveur=Serveur()
+        self.serveur.getJoueurs()
+        self.joueurs=[Joueur(i,f"Player {i+1}",self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(len(self.serveur.players))]
+        self.serveur.communication()
+
         self.cases=[[None for j in range(self.nbcases)] for i in range(self.nbcases)]
         self.createCases()
         self.createLiens()
@@ -198,8 +200,8 @@ class Game():
         return None 
 
 class Interface(Game):
-    def __init__(self,nbcases,nbjoueur):
-        super().__init__(nbcases,nbjoueur)
+    def __init__(self):
+        super().__init__()
 
         self.TEST=TEST(self)
 
@@ -328,5 +330,107 @@ class TEST():
 
 
 
+
+import socket
+
+
+class Serveur():
+    def __init__(self):
+        print("DEBUG: SERVEUR STARUP")
+        self.maxPlayer = NBJOUEUR
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind(('', 5000))
+
+    # Attente de la connexion des joueurs
+        self.players = []
+
+    def getJoueurs(self):
+        print("DEBUG: WAITING FOR PLAYER")
+        while len(self.players) < self.maxPlayer:
+            self.socket.listen(5)
+            client, address = self.socket.accept()
+            print(f"[INFO] {address} connected")
+
+            response = client.recv(255).decode()
+            if not response:
+                client.send(self.build_message("ERROR", ["Erreur dans la reception du message"]))
+                continue
+
+            command, *params = self.parse_message(response)
+            if command != 'JOIN' or len(params) != 1:
+                client.send(self.build_message("ERROR", ["Vous devez en premier JOIN avec un nom d'équipe"]))
+                continue
+
+            print(f"[INFO] Nouveau client accepté avec le nom {params[0]}")
+            self.players.append(client)
+
+            # Annonce du début de la partie
+        print("[INFO] Tous les joueurs ont rejoins, début de la partie")
+        for i, player in enumerate(self.players):
+            player.send(self.build_message("NEWGAME", [5, self.maxPlayer, i, 0, 0]))
+        
+
+    def communication(self):
+        print("DEBUG: WAITING FOR PLAYER MOVE ")
+        # Tant que la game tourne
+        commandeJoueur={} 
+        while True:
+            for player_id, player in enumerate(self.players):
+                player.send(self.build_message("NEWTURN", [0]))
+                # Envoie de tous les nouveaux événements
+                move = player.recv(255).decode()
+                
+                # Si cela arrive, c'est qu'un
+                if not move:
+                    error("Erreur dans la reception du joueur {player_id}")
+                    exit()
+
+                # On execute la commande envoyée par le joueur
+                command, *params = self.parse_message(move)
+                err, response = self.handle_command(player_id, command, params)
+                print(f"DEBUG:  {command=} ")
+                commandeJoueur[f"{player_id}"]=command
+                # Si une erreur a eu lieu, on quite directement le programme 
+                # (cela signifie que le code du client n'est pas bon)
+                if err:
+                    self.error(response)
+
+        return commandeJoueur
+
+    def error(self,msg):
+        print(f"[ERROR] {msg}")
+        exit()
+
+    def build_message(self,key, params):
+        msg = f"{key}|{'|'.join(map(str, params))}".encode()
+        print(f"[LOG] {msg}")
+        return msg
+
+    def parse_message(self,msg):
+        return [s.upper() for s in msg.split("|")]
+
+    def move_player(self,player_id, params):
+        direction = params[0]
+        return (0, "")
+
+    def handle_command(self,player_id, command, params):
+        commands = {'MOVE': "move"}
+        if not command in commands:
+            return (1, "Commande inexistante")
+
+        return commands[command](player_id, params)
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__== "__main__":
-    Interface(NBCASES,NBJOUEUR)
+    Interface()
