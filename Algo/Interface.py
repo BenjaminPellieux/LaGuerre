@@ -40,11 +40,7 @@ class Lien():
         #self.fromCase.liens.add(self)
 
 #Groupe
-class Unite():
-    def __init__(self,parid,parpos:tuple,parsize:int):
-        self.size=parsize
-        self.posx,self.posy=parpos
-        self.id=parid
+
 
 
 class Joueur():
@@ -53,10 +49,11 @@ class Joueur():
         self.id=parid
         self.nom=parnom
         self.color=parcolor
-        self.pos=parpos
-        self.nbUnite=BASE_UNITE_SIZE
+        #self.pos=parpos
+        self.nbUnite=0
+        self.nbArmy=BASE_UNITE_SIZE
         self.listUnite=[[None for j in range(self.nbcase)] for i in range(self.nbcase)]
-        self.listUnite[parpos[0]][parpos[1]]=Unite(0,parpos,self.nbUnite)
+        self.listUnite[parpos[0]][parpos[1]]=Unite(self,self.nbUnite,parpos,self.nbArmy)
 
 
     def getUniteById(self,idUnite:int):
@@ -65,6 +62,14 @@ class Joueur():
                 if unite and  unite.id==idUnite:
                     return unite
         return None 
+
+class Unite(Joueur):
+    def __init__(self,joueur,parid,parpos:tuple,parsize:int):
+        self.joueur=joueur
+        self.size=parsize
+        self.posx,self.posy=parpos
+        self.id=parid
+        #self.case=Game().getCase(parpos)
 
 class Game():
     def __init__(self,nbcases:int,nbjoueur:int):
@@ -102,31 +107,67 @@ class Game():
     def moveUnite(self,idJoueur:int,parsize:int,idUnite:int,direction:string):
         #unite=self.joueurs[idJoueur].listUnite[posfrom[0]][posfrom[1]]
         unite=self.joueurs[idJoueur].getUniteById(idUnite)
-        
-        
+
         #getUniteByPos(posfrom)
         if unite:   
+            ##MOUVEMENT
             posfrom=(unite.posx,unite.posy)
             newpos=self.getNewPos(posfrom,direction)
             if self.verifierLien(posfrom,newpos):   
                 if parsize<=unite.size:
                     newpos_unite=self.joueurs[idJoueur].listUnite[newpos[0]][newpos[1]]
-                    
                     #getUniteByPos(newpos)
                     unite.size-=parsize
                     if newpos_unite:
                         newpos_unite.size+=parsize
                     else: 
-                        newUnite=Unite(len(self.joueurs[idJoueur].listUnite),newpos,parsize)
+                        self.joueurs[idJoueur].nbUnite+=1
+                        newUnite=Unite(self.joueurs[idJoueur],self.joueurs[idJoueur].nbUnite,newpos,parsize)
                         self.joueurs[idJoueur].listUnite[newpos[0]][newpos[1]]=newUnite
 
-                    if unite.size==0:
-                        self.joueurs[idJoueur].listUnite[unite.posx][unite.posy]=None
-
                 else: print("ERROR: PAS ASSEZ DE SOLDAT")
-            else: print("ERROR: LIEN INUTILISABLE")
+            else: print("ERROR: LIEN INUTILISABLE") 
         else: print("ERROR: PAS D'UNITE A CETTE POSITION")
 
+
+    def actualise(self):
+        for joueur in self.joueurs:
+            for i in range(self.nbcases):
+                for unite in joueur.listUnite[i]:
+                    if not unite:
+                        continue
+                    ##ATTAQUE 
+                    
+                    uniteEnnemie= self.verifierEnnemie(unite,(unite.posx,unite.posy))
+                    if uniteEnnemie:
+                        unitePerdu=min(unite.size,uniteEnnemie.size)
+                        joueur.nbArmy-=unitePerdu
+                        uniteEnnemie.joueur.nbArmy-=unitePerdu
+
+                        if uniteEnnemie.size>unite.size:
+                            uniteEnnemie.size-=unite.size
+                            unite.size=0
+                        
+                        elif uniteEnnemie.size<unite.size:
+                            unite.size-=uniteEnnemie.size
+                            uniteEnnemie.size=0 
+
+                        else:
+                            unite.size,uniteEnnemie=0,0
+
+                    if unite.size==0:
+                        joueur.listUnite[unite.posx][unite.posy]=None            
+
+
+    def verifierEnnemie(self,parUnite,pos:tuple):
+        for joueur in self.joueurs:
+            for i in range(self.nbcases):
+                for unite in joueur.listUnite[i]:
+                    if not unite:
+                        continue
+                    if unite!=parUnite and (unite.posx,unite.posy)==pos:
+                        return unite
+        return None
 
     def getNewPos(self,depart:tuple,direction:string)->tuple:
         if direction=="N":
@@ -179,7 +220,7 @@ class Interface(Game):
             self.TEST.test(nb_tour)
             ##########TEST#################
 
-
+            self.actualise()
 
             for event in pygame.event.get():
                 if event.type==QUIT:
@@ -210,7 +251,7 @@ class Interface(Game):
                     self.display.blit(self.font_unite.render(str(unite.size),1,BLACK), (x-(self.size_case/3) , (y-(self.size_case/4))))
 
 
-            self.display.blit(self.font.render(str(joueur.nom)+" :  "+str(joueur.nbUnite),1,joueur.color), ((WIDTH-300), 200*(joueur.id+1)))
+            self.display.blit(self.font.render(str(joueur.nom)+" :  "+str(joueur.nbArmy),1,joueur.color), ((WIDTH-300), 200*(joueur.id+1)))
 
     def affchageDamier(self):
         self.display.fill(WHITE)
@@ -254,6 +295,7 @@ class TEST():
     def test(self,nb_tour:int):
         #print("TEST: tour:",nb_tour)
         # N , S ,E, W
+        # idJoueur,parsize,idUnite ,direction
         if nb_tour==0:
             self.game.moveUnite(0,5,0,"E")
             self.game.moveUnite(1,5,0,"E")
@@ -265,9 +307,17 @@ class TEST():
             self.game.moveUnite(1,3,0,"W")
         elif nb_tour==4:
             self.game.moveUnite(1,4,0,"W")
+            self.game.moveUnite(1,4,0,"E")
 
-        elif nb_tour==4:
-            self.game.moveUnite(1,4,0,"W")
+        elif nb_tour==5:
+            self.game.moveUnite(0,4,1,"E")
+        
+        elif nb_tour==6:
+            self.game.moveUnite(0,2,2,"E")
+
+        elif nb_tour==7:
+            self.game.moveUnite(0,2,3,"E")
+
 
         #else:self.game.pause=True
 
