@@ -257,7 +257,7 @@ class Interface(Game):
         self.TEST=TEST(self)
 
 
-        self.sprite_soldier=[pygame.image.load("/path/to/image_file.png"),pygame.image.load("/path/to/image_file.png",pygame.image.load("/path/to/image_file.png") "sprite/one_soldier.png","sprite/two_soldier.png","sprite/three_soldier.png",]
+        self.sprite_soldier=[pygame.image.load( "sprite/one_soldier.png").convert(),pygame.image.load( "sprite/two_soldier.png").convert() ,pygame.image.load( "sprite/three_soldier.png").convert()]
         pygame.init()        
         self.pause=False 
 
