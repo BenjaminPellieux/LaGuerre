@@ -1,8 +1,9 @@
 from distutils import command
-from msilib.schema import Error
-import pygame, sys, string
+#from msilib.schema import Error
 from pygame.locals import *
 from random import randint
+import pygame, sys, string, socket
+
 
 NBJOUEUR=2
 NBCASES=5
@@ -90,23 +91,33 @@ class Game():
         self.joueurs=[Joueur(i,self.serveur.teamName[i],self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(len(self.serveur.players))]
         self.serveur.communication()
 
-        self.cases=[[None for j in range(self.nbcases)] for i in range(self.nbcases)]
+        self.listCases=[[None for j in range(self.nbcases)] for i in range(self.nbcases)]
         self.createCases()
+
+
+        #########################
+        # case function 
+        self.listCases[1][0].case_function ="DEVIDE"
+        self.listCases[self.nbcases-1][self.nbcases-2].case_function ="MULT"
+        #########################
+
+
+
         self.createLiens()
  
     def createCases(self):
         for i in range(self.nbcases*self.nbcases):
-            self.cases[i%self.nbcases][i//self.nbcases]=Case(i,i%self.nbcases,i//self.nbcases)
+            self.listCases[i%self.nbcases][i//self.nbcases]=Case(i,i%self.nbcases,i//self.nbcases)
 
     
     def createLiens(self):
         for ligne in range(self.nbcases):
-            for thecase in self.cases[ligne]:                
+            for thecase in self.listCases[ligne]:                
                 voisins=([(thecase.posx+k[0],thecase.posy+k[1])  for k in [(-1,0),(0,-1),(1,0),(0,1)]])
                 for voisin in voisins:
                     if -1<voisin[0]<self.nbcases and -1<voisin[1]<self.nbcases:
-                        if self.cases[voisin[0]][voisin[1]]:
-                            thecase.liens.add(Lien(thecase,self.cases[voisin[0]][voisin[1]]))
+                        if self.listCases[voisin[0]][voisin[1]]:
+                            thecase.liens.add(Lien(thecase,self.listCases[voisin[0]][voisin[1]]))
         
     def moveUnite(self,idJoueur:int,params:list):
         #unite=self.joueurs[idJoueur].listUnite[posfrom[0]][posfrom[1]]
@@ -146,10 +157,16 @@ class Game():
                 for unite in joueur.listUnite[i]:
                     if not unite:
                         continue
-                    #TODO : ajout fonction de la case : /2 unite *2 unite   
-                    
-                    
-                    
+                    #TODO : ajout fonction de la case : /2 unite \ *2 unite \ Passe sont prochain tour \ passe le tour de l'adversaire 
+                    case=self.listCases[unite.posx][unite.posy]
+                    if case.case_function and unite.size>1:
+                        if case.case_function =="DEVIDE":
+                            unite.size//=2
+                            case.case_function=None
+                        elif case.case_function =="MULT":
+                            unite.size*=2
+                            case.case_function=None
+                        
                     ##ATTAQUE 
                     
                     uniteEnnemie= self.verifierEnnemie(unite,(unite.posx,unite.posy))
@@ -202,7 +219,7 @@ class Game():
 
                     
     def verifierLien(self,depart:tuple,newpos:tuple)->bool:
-        for lien in self.cases[depart[0]][depart[1]].liens:
+        for lien in self.listCases[depart[0]][depart[1]].liens:
             if (lien.toCase.posx,lien.toCase.posy)==newpos:
                 return lien.enable
         return None 
@@ -280,13 +297,16 @@ class Interface(Game):
     def affchageDamier(self):
         self.display.fill(WHITE)
         for i in range(self.nbcases):
-            for case in self.cases[i]:
+            for case in self.listCases[i]:
                 if not case:
                     continue
 
                 x=(20+case.posx*(self.size_case+self.size_lien))
                 y=(20+case.posy*(self.size_case+self.size_lien))
-                pygame.draw.rect(self.display,BLUE,(x,y,self.size_case,self.size_case))
+                if not case.case_function:
+                    pygame.draw.rect(self.display,BLUE,(x,y,self.size_case,self.size_case))
+                else:
+                    pygame.draw.rect(self.display,(0,0,0),(x,y,self.size_case,self.size_case))
                 #for lien in case.listLien:
                 tmp=(x,y)
                 for lien in case.liens:
@@ -342,14 +362,6 @@ class TEST():
         elif nb_tour==7:
             self.game.moveUnite(0,2,3,"E")
 
-
-        #else:self.game.pause=True
-
-
-
-
-
-import socket
 
 
 class Serveur():
