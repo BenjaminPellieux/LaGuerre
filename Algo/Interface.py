@@ -1,7 +1,7 @@
 from distutils import command
 #from msilib.schema import Error
 from pygame.locals import *
-from random import randint
+from random import randint, choice, seed
 import pygame, sys, string, socket
 
 
@@ -72,35 +72,43 @@ class Unite(Joueur):
         self.size=parsize
         self.posx,self.posy=parpos
         self.id=parid
-        #self.case=Game().getCase(parpos)
 
 class Game():
     def __init__(self):
 
+        #DEFINE: Element
         self.nbcases=NBCASES
         self.nbjoueur=NBJOUEUR
         self.positionJoueur=[(0,0),(self.nbcases-1,self.nbcases-1),(self.nbcases-1,0),(0,self.nbcases-1)]
+        
+
+        #DEFINE: Style
         self.colorJoueur=[(0,255,0),(255, 160, 122),(240, 15, 220),(0,0,0)]
         self.nblien=self.nbcases-1
         self.size_lien=(0.35*(HEIGHT-40))/self.nblien
         self.size_case=(0.65*(HEIGHT-40))/self.nbcases
         
 
+        #DEFINE: Reseau
         self.serveur=Serveur()
         self.serveur.getJoueurs()
-        self.joueurs=[Joueur(i,self.serveur.teamName[i],self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(len(self.serveur.players))]
-        self.serveur.communication()
+        
 
+        #DEFINE: Joueurs
+        self.joueurs=[Joueur(i,self.serveur.teamName[i],self.positionJoueur[i],self.colorJoueur[i],self.nbcases) for i in range(len(self.serveur.players))]
+
+
+        #DEFINE: jeu
         self.listCases=[[None for j in range(self.nbcases)] for i in range(self.nbcases)]
         self.createCases()
-
-
-        #########################
+        self.proba_case_function=3 #proba de 0.03 au debut 
+        self.listFonctionCase=["DIVIDE","MULT","NULL"]
+        self.casesVide=[]
+        self.nbcase_with_function=0
         # case function 
-        self.listCases[1][0].case_function ="DEVIDE"
-        self.listCases[self.nbcases-1][self.nbcases-2].case_function ="MULT"
+        #self.listCases[1][0].case_function ="DEVIDE"
+        #self.listCases[self.nbcases-1][self.nbcases-2].case_function ="MULT"
         #########################
-
 
 
         self.createLiens()
@@ -108,6 +116,8 @@ class Game():
     def createCases(self):
         for i in range(self.nbcases*self.nbcases):
             self.listCases[i%self.nbcases][i//self.nbcases]=Case(i,i%self.nbcases,i//self.nbcases)
+
+
 
     
     def createLiens(self):
@@ -126,7 +136,7 @@ class Game():
         unite=self.joueurs[idJoueur].getUniteById(idUnite)
 
         #getUniteByPos(posfrom)
-        if unite and direction!="M":   
+        if unite and direction!="M" and self.listCases[unite.posx][unite.posy].case_function!="NULL" :   
             ##MOUVEMENT
             posfrom=(unite.posx,unite.posy)
             newpos=self.getNewPos(posfrom,direction)
@@ -153,11 +163,17 @@ class Game():
 
     def actualise(self):
         for joueur in self.joueurs:
+            joueur.nbArmy=0
             for i in range(self.nbcases):
-                for unite in joueur.listUnite[i]:
+                for j in range(self.nbcases):
+                    unite=joueur.listUnite[j][i]
+                    
                     if not unite:
+                        print(f"DEBUG: {j=} {i=}")
+                        self.casesVide.append(self.listCases[j][i])
                         continue
-                    #TODO : ajout fonction de la case : /2 unite \ *2 unite \ Passe sont prochain tour \ passe le tour de l'adversaire 
+
+                    #TODO : ajout fonction de la case : /2 unite \ *2 unite \ Passe sont prochain tour \ passe le tour de l'adversaire \ case detruite
                     case=self.listCases[unite.posx][unite.posy]
                     if case.case_function and unite.size>1:
                         if case.case_function =="DEVIDE":
@@ -171,10 +187,6 @@ class Game():
                     
                     uniteEnnemie= self.verifierEnnemie(unite,(unite.posx,unite.posy))
                     if uniteEnnemie:
-                        unitePerdu=min(unite.size,uniteEnnemie.size)
-                        joueur.nbArmy-=unitePerdu
-                        uniteEnnemie.joueur.nbArmy-=unitePerdu
-
                         if uniteEnnemie.size>unite.size:
                             uniteEnnemie.size-=unite.size
                             unite.size=0
@@ -185,9 +197,23 @@ class Game():
 
                         else:
                             unite.size,uniteEnnemie=0,0
+                    joueur.nbArmy+=unite.size
 
                     if unite.size==0:
-                        joueur.listUnite[unite.posx][unite.posy]=None            
+                        joueur.listUnite[unite.posx][unite.posy]=None
+        
+    def actualiseCases(self):
+        print(f"DEBUG: {self.casesVide=}")
+        for case in self.casesVide:
+            if case.case_function or self.nbcase_with_function > self.nbcases :
+                continue
+            if randint(0, 100)<self.proba_case_function:
+                self.nbcase_with_function+=1
+                case.case_function=choice(self.listFonctionCase)
+        self.proba_case_function+=1
+        self.casesVide=[]
+
+
 
 
     def verifierEnnemie(self,parUnite,pos:tuple):
@@ -230,6 +256,8 @@ class Interface(Game):
 
         self.TEST=TEST(self)
 
+
+        self.sprite_soldier=[pygame.image.load("/path/to/image_file.png"),pygame.image.load("/path/to/image_file.png",pygame.image.load("/path/to/image_file.png") "sprite/one_soldier.png","sprite/two_soldier.png","sprite/three_soldier.png",]
         pygame.init()        
         self.pause=False 
 
@@ -259,6 +287,7 @@ class Interface(Game):
             except Exception as e:
                 print(f"ERROR: {e} ")    
             self.actualise()
+            self.actualiseCases()
 
 
 
@@ -458,4 +487,5 @@ class Serveur():
 
 
 if __name__== "__main__":
+    seed(10)
     Interface()
