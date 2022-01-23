@@ -9,7 +9,7 @@ commande=["MOVE","STAY"]
 socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 socket.connect((host, port))
 print(f"Connection on {port}")
-socket.send("JOIN|EKIP".encode())
+socket.send("JOIN|PUSSY".encode())
 while True:
     msg_serv=socket.recv(255).decode()
     print(f"RECU: {msg_serv=}  ")

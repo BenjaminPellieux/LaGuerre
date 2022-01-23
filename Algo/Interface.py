@@ -1,4 +1,4 @@
-from distutils import command
+#from distutils import command
 #from msilib.schema import Error
 from pygame.locals import *
 from random import randint, choice, seed
@@ -6,7 +6,7 @@ import pygame, sys, string, socket
 
 
 NBJOUEUR=2
-NBCASES=5
+NBCASES=10
 HEIGHT=1000
 BASE_UNITE_SIZE=12
 WIDTH=HEIGHT+400
@@ -169,7 +169,6 @@ class Game():
                     unite=joueur.listUnite[j][i]
                     
                     if not unite:
-                        print(f"DEBUG: {j=} {i=}")
                         self.casesVide.append(self.listCases[j][i])
                         continue
 
@@ -203,7 +202,6 @@ class Game():
                         joueur.listUnite[unite.posx][unite.posy]=None
         
     def actualiseCases(self):
-        print(f"DEBUG: {self.casesVide=}")
         for case in self.casesVide:
             if case.case_function or self.nbcase_with_function > self.nbcases :
                 continue
@@ -254,10 +252,8 @@ class Interface(Game):
     def __init__(self):
         super().__init__()
 
-        self.TEST=TEST(self)
 
-
-        self.sprite_soldier=[pygame.image.load( "sprite/one_soldier.png").convert(),pygame.image.load( "sprite/two_soldier.png").convert() ,pygame.image.load( "sprite/three_soldier.png").convert()]
+        
         pygame.init()        
         self.pause=False 
 
@@ -268,6 +264,8 @@ class Interface(Game):
 
         nb_tour=0
         self.display=pygame.display.set_mode((WIDTH,HEIGHT),0,32)
+        self.sprite_soldier=[pygame.image.load( "sprite/one_soldier.png").convert(),pygame.image.load( "sprite/two_soldier.png").convert() ,pygame.image.load( "sprite/three_soldier.png").convert()]
+
         self.font=pygame.font.Font(None, 50)
         self.font_unite=pygame.font.Font(None, int(self.size_case*0.8))
         while True:
@@ -280,12 +278,13 @@ class Interface(Game):
             ##########TEST#################
             try:
                     
-                commandJoueur=self.serveur.communication()
+                commandJoueur=self.serveur.communication(nb_tour)
                 for key in commandJoueur:
                     if commandJoueur[key][0]=="MOVE":
                         self.moveUnite(key,commandJoueur[key][1])
             except Exception as e:
                 print(f"ERROR: {e} ")    
+
             self.actualise()
             self.actualiseCases()
 
@@ -314,11 +313,17 @@ class Interface(Game):
                 for unite in joueur.listUnite[i]:
                     if not unite:
                         continue
-
-                    x=(20+unite.posx*(self.size_case+self.size_lien))+self.size_case/2
-                    y=(20+unite.posy*(self.size_case+self.size_lien))+self.size_case/2
-                    pygame.draw.circle(self.display, joueur.color, (x, y), (self.size_case)*0.5,int(self.size_case*0.5)) 
-                    self.display.blit(self.font_unite.render(str(unite.size),1,BLACK), (x-(self.size_case/3) , (y-(self.size_case/4))))
+                    print(f"DEBUG: {unite.id=} {unite.size=}")
+                    #  WITHOUT SPRITE ###########
+                    #x=(20+unite.posx*(self.size_case+self.size_lien))+self.size_case/2
+                    #y=(20+unite.posy*(self.size_case+self.size_lien))+self.size_case/2
+                    #pygame.draw.circle(self.display, joueur.color, (x, y), (self.size_case)*0.5,int(self.size_case*0.5)) 
+                    #self.display.blit(self.font_unite.render(str(unite.size),1,BLACK), (x-(self.size_case/3) , (y-(self.size_case/4))))
+                    #########################
+                    x=(20+unite.posx*(self.size_case+self.size_lien))
+                    y=(20+unite.posy*(self.size_case+self.size_lien))
+                    self.display.blit(pygame.transform.scale(self.sprite_soldier[((unite.size-1)//4)], (self.size_case, self.size_case)),(x , y))
+                    self.display.blit(self.font_unite.render(str(unite.size),1,BLACK), (x+(self.size_case/3) , (y+(self.size_case/2))))
 
 
             self.display.blit(self.font.render(str(joueur.nom)+" :  "+str(joueur.nbArmy),1,joueur.color), ((WIDTH-300), 200*(joueur.id+1)))
@@ -360,36 +365,7 @@ class Interface(Game):
                     pygame.draw.rect(self.display,RED,(x,y,self.size_lien*lien.width[0],self.size_lien*lien.width[1]))
 
 #ZONE TEST
-class TEST():
-    def __init__(self,game:Game):
-        self.game=game
-        self.size_map=NBCASES
 
-    def test(self,nb_tour:int):
-        #print("TEST: tour:",nb_tour)
-        # N , S ,E, W
-        # idJoueur,parsize,idUnite ,direction
-        if nb_tour==0:
-            self.game.moveUnite(0,5,0,"E")
-            self.game.moveUnite(1,5,0,"E")
-        elif nb_tour==1:
-            self.game.moveUnite(1,5,0,"W")
-            self.game.moveUnite(0,5,0,"E")
-        elif nb_tour==3:
-            self.game.moveUnite(0,1,0,"E")
-            self.game.moveUnite(1,3,0,"W")
-        elif nb_tour==4:
-            self.game.moveUnite(1,4,0,"W")
-            self.game.moveUnite(1,4,0,"E")
-
-        elif nb_tour==5:
-            self.game.moveUnite(0,4,1,"E")
-        
-        elif nb_tour==6:
-            self.game.moveUnite(0,2,2,"E")
-
-        elif nb_tour==7:
-            self.game.moveUnite(0,2,3,"E")
 
 
 
@@ -401,7 +377,7 @@ class Serveur():
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind(('', 5000))
         self.teamName=[]
-    # Attente de la connexion des joueurs
+        # Attente de la connexion des joueurs
         self.players = []
 
     def getJoueurs(self):
@@ -431,12 +407,12 @@ class Serveur():
         for i, player in enumerate(self.players):
             player.send(self.build_message("NEWGAME", [5, self.maxPlayer, i, 0, 0]))
 
-    def communication(self):
+    def communication(self,nbtour):
         print("DEBUG: WAITING FOR PLAYER MOVE ")
         # Tant que la game tourne
         commandeJoueur={} 
         for player_id, player in enumerate(self.players):
-            player.send(self.build_message("NEWTURN", [0]))
+            player.send(self.build_message("NEWTURN", [nbtour]))
             # Envoie de tous les nouveaux événements
             move = player.recv(255).decode()
 
