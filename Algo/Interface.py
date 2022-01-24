@@ -6,7 +6,7 @@ import pygame, sys, string, socket
 
 
 NBJOUEUR=2
-NBCASES=10
+NBCASES=6
 HEIGHT=1000
 BASE_UNITE_SIZE=12
 WIDTH=HEIGHT+400
@@ -102,7 +102,7 @@ class Game():
         self.listCases=[[None for j in range(self.nbcases)] for i in range(self.nbcases)]
         self.createCases()
         self.proba_case_function=3 #proba de 0.03 au debut 
-        self.listFonctionCase=["DIVIDE","MULT","NULL"]
+        self.listFonctionCase=["DIVIDE","MULT","NULL","PASS"]
         self.casesVide=[]
         self.nbcase_with_function=0
         # case function 
@@ -136,11 +136,11 @@ class Game():
         unite=self.joueurs[idJoueur].getUniteById(idUnite)
 
         #getUniteByPos(posfrom)
-        if unite and direction!="M" and self.listCases[unite.posx][unite.posy].case_function!="NULL" :   
+        if unite and direction!="M":                
             ##MOUVEMENT
             posfrom=(unite.posx,unite.posy)
             newpos=self.getNewPos(posfrom,direction)
-            if self.verifierLien(posfrom,newpos):   
+            if self.verifierLien(posfrom,newpos)  and self.listCases[unite.posx][unite.posy].case_function!="PASS":   
                 if parsize<unite.size or not (unite.size-parsize): 
                     newpos_unite=self.joueurs[idJoueur].listUnite[newpos[0]][newpos[1]]
                     #getUniteByPos(newpos)
@@ -169,7 +169,8 @@ class Game():
                     unite=joueur.listUnite[j][i]
                     
                     if not unite:
-                        self.casesVide.append(self.listCases[j][i])
+                        if not self.listCases[j][i].case_function:
+                            self.casesVide.append(self.listCases[j][i])
                         continue
 
                     #TODO : ajout fonction de la case : /2 unite \ *2 unite \ Passe sont prochain tour \ passe le tour de l'adversaire \ case detruite
@@ -181,6 +182,8 @@ class Game():
                         elif case.case_function =="MULT":
                             unite.size*=2
                             case.case_function=None
+                        elif case.case_function=="NULL":
+                            unite.size=0
                         
                     ##ATTAQUE 
                     
@@ -202,12 +205,8 @@ class Game():
                         joueur.listUnite[unite.posx][unite.posy]=None
         
     def actualiseCases(self):
-        for case in self.casesVide:
-            if case.case_function or self.nbcase_with_function > self.nbcases :
-                continue
-            if randint(0, 100)<self.proba_case_function:
-                self.nbcase_with_function+=1
-                case.case_function=choice(self.listFonctionCase)
+        if randint(0, 100)<self.proba_case_function:
+            choice(self.casesVide).case_function=choice(self.listFonctionCase)
         self.proba_case_function+=1
         self.casesVide=[]
 
@@ -313,7 +312,6 @@ class Interface(Game):
                 for unite in joueur.listUnite[i]:
                     if not unite:
                         continue
-                    print(f"DEBUG: {unite.id=} {unite.size=}")
                     #  WITHOUT SPRITE ###########
                     #x=(20+unite.posx*(self.size_case+self.size_lien))+self.size_case/2
                     #y=(20+unite.posy*(self.size_case+self.size_lien))+self.size_case/2
@@ -340,7 +338,8 @@ class Interface(Game):
                 if not case.case_function:
                     pygame.draw.rect(self.display,BLUE,(x,y,self.size_case,self.size_case))
                 else:
-                    pygame.draw.rect(self.display,(0,0,0),(x,y,self.size_case,self.size_case))
+                    pygame.draw.rect(self.display,(BLUE),(x,y,self.size_case,self.size_case))
+                    self.display.blit(self.font_unite.render(case.case_function,1,BLACK), (x+(self.size_case/4) , (y+(self.size_case/4))))
                 #for lien in case.listLien:
                 tmp=(x,y)
                 for lien in case.liens:
