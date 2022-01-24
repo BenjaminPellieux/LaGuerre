@@ -179,7 +179,7 @@ class Game():
                             self.casesVide.append(self.listCases[j][i])
                         continue
 
-                    #TODO : ajout fonction de la case : /2 unite \ *2 unite \ Passe sont prochain tour \ passe le tour de l'adversaire \ case detruite
+                    #TODO : teleporteur ???
                     case=self.listCases[unite.posx][unite.posy]
                     if case.case_function and unite.size>1:
                         if case.case_function =="DEVIDE":
@@ -355,7 +355,7 @@ class Interface(Game):
                 else:
                     self.display.blit(pygame.transform.scale(self.dicoSpriteCaseFunction[case.case_function], (self.size_case, self.size_case)),(x , y))
 
-                #for lien in case.listLien:
+                #TODO: repetition de code !!!!!!!!!
                 tmp=(x,y)
                 for lien in case.liens:
                     x,y=tmp
