@@ -4,19 +4,26 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable, Any
 import pygame, sys, socket
 
-
+# JEU
 NBJOUEUR = 2
 NBCASES = 6
-HEIGHT = 1000
 BASE_UNITE_SIZE = 12
+
+# AFFICHAGE
+HEIGHT = 1000
 WIDTH = HEIGHT+400
+
+SIZE_LIEN = (0.35 * (HEIGHT - 40)) / NBCASES - 1
+SIZE_CASE = (0.65 * (HEIGHT - 40)) / NBCASES
+TOTAL_SIZE_LEN = SIZE_LIEN + SIZE_CASE
+
+# COULEURS
 WHITE = (255, 255, 255)
 BLUE = (0, 100, 255)
 RED = (255, 0, 0)
 BLACK = (0, 0, 0)
 
 Pos = tuple[int, int]
-
 
 @dataclass(eq = True, frozen = True)
 class Lien:
@@ -33,11 +40,16 @@ class Lien:
 
 @dataclass
 class Case:
-    case_id: int
     posx: int
     posy: int
     liens: set[Lien] = field(default_factory=set)
     case_function: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        voisins = [(self.posx + x, self.posy + y) for x, y in [(-1, 0), (0, -1), (1, 0), (0, 1)]]
+        for vx, vy in voisins:
+            if 0 <= vx < NBCASES and 0 <= vy < NBCASES:
+                self.liens.add(Lien(self.pos, (vx, vy)))
 
     @property
     def pos(self) -> Pos:
@@ -60,17 +72,19 @@ class Unite:
 class Joueur:
     def __init__(self, joueur_id: int, nom: str, default_pos: Pos, color: tuple[int, int, int], nb_case: int) -> None:
         self.id = joueur_id
-        self.nb_case = nb_case
         self.nom = nom
         self.color = color
         self.nb_unite = 0
         self.nb_army = BASE_UNITE_SIZE
-        self.list_unite: dict[int, Unite] = {}
-        self.list_unite[0] = Unite(self.nb_unite, default_pos, BASE_UNITE_SIZE)
+        self.list_unite: dict[int, Unite] = {0: Unite(self.nb_unite, default_pos, BASE_UNITE_SIZE)}
         self.can_play = True
 
-    def get_unite_by_id(self, idUnite: int) -> Optional[Unite]:
-        return self.list_unite.get(idUnite)
+    def get_unite_by_id(self, idUnite: int) -> Unite:
+        if (res := self.list_unite.get(idUnite)):
+            return res
+
+        print("[ERROR] Aucune unitée avec l'id {idUnite} pour le joueur {self.id}")
+        exit()
 
     def get_unite_at(self, pos: Pos) -> Optional[Unite]:
         for unite in self.list_unite.values():
@@ -81,50 +95,27 @@ class Joueur:
     def get_all_unite_pos(self) -> list[Pos]:
         return [unite.pos for unite in self.list_unite.values()]
 
+    def __repr__(self) -> str:
+        return f"{self.nom} : {self.nb_army}"
+
 class Game:
     def __init__(self) -> None:
-        self.nbcases = NBCASES
-        self.nbjoueur = NBJOUEUR
-        self.positionJoueur = [(0, 0), (self.nbcases-1, self.nbcases-1), (self.nbcases-1, 0), (0, self.nbcases-1)]
+        self.positionJoueur = [(0, 0), (NBCASES - 1, NBCASES - 1), (NBCASES - 1, 0), (0, NBCASES - 1)]
         
-
         #DEFINE: Style
         self.colorJoueur = [(0, 255, 0), (255, 160, 122), (240, 15, 220), (0, 0, 0)]
-        self.nblien = self.nbcases-1
-        self.size_lien = (0.35*(HEIGHT-40))/self.nblien
-        self.size_case = (0.65*(HEIGHT-40))/self.nbcases
 
         #DEFINE: Reseau
         self.serveur: Serveur = Serveur()
         self.serveur.getJoueurs()
-        
 
         #DEFINE: Joueurs
-        self.listJoueurs = [Joueur(i, self.serveur.team_name[i], self.positionJoueur[i], self.colorJoueur[i], self.nbcases) for i in range(len(self.serveur.players))]
+        self.listJoueurs = [Joueur(i, self.serveur.team_name[i], self.positionJoueur[i], self.colorJoueur[i], NBCASES) for i in range(len(self.serveur.players))]
 
         #DEFINE: jeu
-        self.listCases: list[list[Optional[Case]]] = [[None for j in range(self.nbcases)] for i in range(self.nbcases)]
-        self.createCases()
+        self.list_cases = [[Case(i, j) for j in range(NBCASES)] for i in range(NBCASES)]
         self.proba_case_function = 5 #proba de 0.03 au debut 
         self.listFonctionCase: list[str] = ["DIVIDE", "MULT", "NULL", "PASS", "ENNEMIPASS"]
-        self.nbcase_with_function = 0
-
-        self.createLiens()
- 
-    def createCases(self) -> None:
-        for i in range(self.nbcases*self.nbcases):
-            self.listCases[i%self.nbcases][i//self.nbcases] = Case(i, i%self.nbcases, i//self.nbcases)
-
-    def createLiens(self) -> None:
-        for ligne in range(self.nbcases):
-            for thecase in self.listCases[ligne]:
-                if thecase:
-                    voisins = ([(thecase.posx+k[0], thecase.posy+k[1]) for k in [(-1, 0), (0, -1), (1, 0), (0, 1)]])
-                    for voisin in voisins:
-                        if 0 <= voisin[0] < self.nbcases and 0 <= voisin[1] < self.nbcases:
-                            case_voisin = self.listCases[voisin[0]][voisin[1]]
-                            if case_voisin:
-                                thecase.liens.add(Lien(thecase.pos, case_voisin.pos))
         
     def moveUnite(self, idJoueur: int, params: list[str]) -> None:
         idUniteStr, parsizeStr, direction = params
@@ -185,7 +176,7 @@ class Game:
                 x,y = unite.pos
 
                 #TODO : teleporteur ???
-                case = self.listCases[x][y]
+                case = self.list_cases[x][y]
                 if case and case.case_function and unite.size > 1:
                     case_functions = {
                             "DIVIDE": self.divide,
@@ -224,10 +215,10 @@ class Game:
             casesOccupes.extend(joueur.get_all_unite_pos())
             
         casesVides = []
-        for i in range(self.nbcases):
-            for j in range(self.nbcases):
-                case = self.listCases[i][j]
-                if not (i, j) in casesOccupes and case and not case.case_function:
+        for i in range(NBCASES):
+            for j in range(NBCASES):
+                case = self.list_cases[i][j]
+                if not (i, j) in casesOccupes and not case.case_function:
                     casesVides.append(case)
 
         if randint(0, 100) < self.proba_case_function:
@@ -245,10 +236,10 @@ class Game:
             if depart[1]>0:
                 return (depart[0], depart[1] - 1)
         elif direction == "S":
-            if depart[1]<self.nbcases-1:
+            if depart[1]<NBCASES-1:
                 return (depart[0], depart[1] + 1)
         elif direction == "E":
-            if depart[0]<self.nbcases-1:
+            if depart[0]<NBCASES-1:
                 return (depart[0] + 1, depart[1])
         elif direction == "W":
             if depart[0]>0:
@@ -285,8 +276,8 @@ class Interface(Game):
             "ENNEMIPASS": pygame.image.load("sprite/ennemiepass.png").convert()
         }
 
-        self.font = pygame.font.Font(None, int(self.size_case/2))
-        self.font_unite = pygame.font.Font(None, int(self.size_case*0.8))
+        self.font = pygame.font.Font(None, int(SIZE_CASE/2))
+        self.font_unite = pygame.font.Font(None, int(SIZE_CASE*0.8))
         while True:
             if not self.pause:
                 self.affichageDamier()
@@ -317,43 +308,43 @@ class Interface(Game):
 
     def affichageJoueur(self) -> None:
         for joueur in self.listJoueurs:
-            for i in range(self.nbcases):
+            for i in range(NBCASES):
                 for unite_id, unite in joueur.list_unite.items():
-                    x = (20+unite.posx*(self.size_case+self.size_lien))
-                    y = (20+unite.posy*(self.size_case+self.size_lien))
-                    size = (unite.size//4)+1
+                    x = 20 + unite.posx * TOTAL_SIZE_LEN
+                    y = 20 + unite.posy * TOTAL_SIZE_LEN
+                    size = unite.size // 4 + 1
                     for i in range(size):
-                        self.display.blit(pygame.transform.scale(self.sprite_soldier, ((self.size_case/size), self.size_case)), (x+(i*(self.size_case/size)) , y))
+                        self.display.blit(pygame.transform.scale(self.sprite_soldier, (SIZE_CASE / size, SIZE_CASE)), (x + i * SIZE_CASE/size, y))
                     
-                    self.display.blit(self.font_unite.render(str(unite.size), True, BLACK), (x+(self.size_case/3) , (y+(self.size_case/2))))
+                    self.display.blit(self.font_unite.render(str(unite.size), True, BLACK), (x+(SIZE_CASE/3) , (y+(SIZE_CASE/2))))
 
 
-            self.display.blit(self.font.render(str(joueur.nom)+" :  "+str(joueur.nb_army), True, joueur.color), ((WIDTH-300), 200*(joueur.id+1)))
+            self.display.blit(self.font.render(f"{joueur!r}", True, joueur.color), ((WIDTH-300), 200*(joueur.id+1)))
 
     def affichageDamier(self) -> None:
         self.display.fill(WHITE)
-        for i in range(self.nbcases):
-            for case in self.listCases[i]:
+        for i in range(NBCASES):
+            for case in self.list_cases[i]:
                 if not case:
                     continue
 
-                x = 20 + case.posx * (self.size_case + self.size_lien)
-                y = 20 + case.posy * (self.size_case + self.size_lien)
+                x = 20 + case.posx * TOTAL_SIZE_LEN
+                y = 20 + case.posy * TOTAL_SIZE_LEN
 
                 for lien in case.liens:
                     draw_x, draw_y = (x, y)
                     idx = 1 - (lien.direction[0] != 0)
 
-                    add = [self.size_lien * lien.direction[idx], (self.size_case / 2) - (self.size_lien * lien.width[1 - idx] / 2)]
+                    add = [SIZE_LIEN * lien.direction[idx], (SIZE_CASE / 2) - (SIZE_LIEN * lien.width[1 - idx] / 2)]
                     draw_x += add[idx]
                     draw_y += add[1 - idx]
 
-                    pygame.draw.rect(self.display, RED, list(map(int, (draw_x, draw_y, self.size_lien * lien.width[0], self.size_lien * lien.width[1]))))
+                    pygame.draw.rect(self.display, RED, list(map(int, (draw_x, draw_y, SIZE_LIEN * lien.width[0], SIZE_LIEN * lien.width[1]))))
 
                 if not case.case_function:
-                    pygame.draw.rect(self.display, BLUE, list(map(int, (x, y, self.size_case, self.size_case))))
+                    pygame.draw.rect(self.display, BLUE, list(map(int, (x, y, SIZE_CASE, SIZE_CASE))))
                 else:
-                    self.display.blit(pygame.transform.scale(self.dicoSpriteCaseFunction[case.case_function], (self.size_case, self.size_case)), (x , y))
+                    self.display.blit(pygame.transform.scale(self.dicoSpriteCaseFunction[case.case_function], (SIZE_CASE, SIZE_CASE)), (x, y))
 
 
 class Serveur:
