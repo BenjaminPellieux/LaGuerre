@@ -23,6 +23,9 @@ BLUE = (0, 100, 255)
 RED = (255, 0, 0)
 BLACK = (0, 0, 0)
 
+#POSITIONEMENT
+PLAYERPOS = [(0, 0), (NBCASES - 1, NBCASES - 1), (NBCASES - 1, 0), (0, NBCASES - 1)]
+
 Pos = tuple[int, int]
 
 @dataclass(eq = True, frozen = True)
@@ -78,11 +81,13 @@ class Joueur:
         self.nb_army = BASE_UNITE_SIZE
         self.list_unite: dict[int, Unite] = {0: Unite(self.nb_unite, default_pos, BASE_UNITE_SIZE)}
         self.can_play = True
+        self.event: dict[str,str] ={"EVENT":[],"ERROR":[]}
 
     def get_unite_by_id(self, idUnite: int) -> Unite:
         if (res := self.list_unite.get(idUnite)):
             return res
 
+        self.event["ERROR"].append("ID_UNITE_INCORRECT|{idUnite}")
         print("[ERROR] Aucune unitée avec l'id {idUnite} pour le joueur {self.id}")
         exit()
 
@@ -99,18 +104,16 @@ class Joueur:
         return f"{self.nom} : {self.nb_army}"
 
 class Game:
-    def __init__(self) -> None:
-        self.positionJoueur = [(0, 0), (NBCASES - 1, NBCASES - 1), (NBCASES - 1, 0), (0, NBCASES - 1)]
-        
+    def __init__(self) -> None:        
+
         #DEFINE: Style
         self.colorJoueur = [(0, 255, 0), (255, 160, 122), (240, 15, 220), (0, 0, 0)]
 
         #DEFINE: Reseau
         self.serveur: Serveur = Serveur()
         self.serveur.getJoueurs()
-
         #DEFINE: Joueurs
-        self.listJoueurs = [Joueur(i, self.serveur.team_name[i], self.positionJoueur[i], self.colorJoueur[i], NBCASES) for i in range(len(self.serveur.players))]
+        self.listJoueurs = [Joueur(i, self.serveur.team_name[i], PLAYERPOS[i], self.colorJoueur[i], NBCASES) for i in range(len(self.serveur.players))]
 
         #DEFINE: jeu
         self.list_cases = [[Case(i, j) for j in range(NBCASES)] for i in range(NBCASES)]
@@ -129,11 +132,15 @@ class Game:
 
         if not joueur.can_play:
             joueur.can_play = True
+            other_joueur.event["EVENT"].append("CAN_PLAY")
             return
 
         ##MOUVEMENT
         posfrom = (unite.posx, unite.posy)
         newpos = self.getNewPos(posfrom, direction)
+        if not newpos:
+            joueur.event["ERROR"].append(f"DIR_ERROR|{direction}")
+            return
 
         if parsize < unite.size:
             newpos_unite = joueur.get_unite_at(newpos)
@@ -146,26 +153,38 @@ class Game:
         elif parsize == unite.size:
             unite.pos = newpos
         else: 
+            joueur.event["ERROR"].append("PAS ASSEZ DE SOLDAT")
             print(f"{idJoueur} ERROR: PAS ASSEZ DE SOLDAT")
+            return 
+
+        for other_joueur in self.listJoueurs:
+            if other_joueur!=joueur:
+                other_joueur.event["EVENT"].append(f"ENEMY_MOVE|{joueur.id}|{parsize}|{newpos[0]}|{newpos[1]}")
 
     def divide(self, joueur: Joueur, case: Case, unite: Unite) -> None:
         unite.size //= 2
         case.case_function = None
+        joueur.event["EVENT"].append(f"UNITE_DEVIDE|{unite.posx}|{unite.posy}")
 
     def mult(self, joueur: Joueur, case: Case, unite: Unite) -> None:
         unite.size *= 2
         case.case_function = None
+        joueur.event["EVENT"].append(f"UNITE_BOOST|{unite.posx}|{unite.posy}")
 
     def null(self, joueur: Joueur, case: Case, unite: Unite) -> None:
         unite.size = 0
+        joueur.event["EVENT"].append(f"LOSE_UNITE|{unite.posx}|{unite.posy}")
+
         # baisser de 1 tour la case
 
     def pass_turn(self, joueur: Joueur, case: Case, unite: Unite) -> None:
         joueur.can_play = False
+        joueur.event["EVENT"].append("CANT_PLAY")
 
     def ennemie_pass(self, joueur: Joueur, case: Case, unite: Unite) -> None:
         for j2 in self.listJoueurs:
             if j2 != joueur:
+                j2.event["EVENT"].append("CANT_PLAY")
                 j2.can_play = False
 
     def actualise(self) -> None:
@@ -174,7 +193,7 @@ class Game:
             joueur.nb_army = 0
             for unite_id, unite in joueur.list_unite.items():
                 x,y = unite.pos
-
+ 
                 #TODO : teleporteur ???
                 case = self.list_cases[x][y]
                 if case and case.case_function and unite.size > 1:
@@ -222,7 +241,12 @@ class Game:
                     casesVides.append(case)
 
         if randint(0, 100) < self.proba_case_function:
-            choice(casesVides).case_function = choice(self.listFonctionCase)
+            choice_case=choice(casesVides)
+            choice_function=choice(self.listFonctionCase)
+            choice_case.case_function = choice_function
+            for joueur in self.listJoueurs:
+                joueur.event["EVENT"].append(f"NEW_CASE|{choice_function}|{choice_case.posx}|{choice_case.posy}")
+
 
     def verifierEnnemie(self, parUnite: Unite, pos: Pos) -> Optional[Unite]:
         for joueur in self.listJoueurs:
@@ -246,8 +270,8 @@ class Game:
                 return (depart[0] - 1, depart[1])
         else:
             print("ERROR")
-
-        return (depart[0], depart[1])
+            
+        return False
 
                     
     def handle_command(self, player_id: int, command: str, params: list[str]) -> None:
@@ -286,7 +310,8 @@ class Interface(Game):
             ##########TEST#################
             #self.TEST.test(nb_tour)
             ##########TEST#################
-            command_joueurs = self.serveur.communication(nb_tour)
+
+            command_joueurs = self.serveur.communication(nb_tour,{joueur.id:joueur.event for joueur in self.listJoueurs})
             for joueur in command_joueurs:
                 command, *params = command_joueurs.get(joueur, ("",))
                 self.handle_command(int(joueur), command, *params)
@@ -380,14 +405,19 @@ class Serveur:
             # Annonce du début de la partie
         print("[INFO] Tous les joueurs ont rejoins, début de la partie")
         for i, player in enumerate(self.players):
-            player.send(self.build_message("NEWGAME", [5, NBJOUEUR, i, 0, 0]))
+            player.send(self.build_message("NEWGAME", [NBCASES, NBJOUEUR, i, PLAYERPOS[i][0],PLAYERPOS[i][1]]))
 
-    def communication(self, nbtour: int) -> dict[int, tuple[str, list[str]]]:
+    def communication(self, nbtour: int,players_events: dict) -> dict[int, tuple[str, list[str]]]:
         print("DEBUG: WAITING FOR PLAYER MOVE ")
         # Tant que la game tourne
         commande_joueur = {} 
         for player_id, player in enumerate(self.players):
+            print(players_events[player_id])
             player.send(self.build_message("NEWTURN", [nbtour]))
+            
+            #player.send(self.build_event_message(players_events[player_id]))
+            #self.build_event_message(players_events[player_id])
+            
 
             if not (move := player.recv(255).decode()):
                 self.error(f"Erreur dans la reception du joueur {player_id}")
@@ -404,6 +434,10 @@ class Serveur:
         print(f"[ERROR] {msg}")
         exit()
 
+    def build_event_message(self,event) -> bytes:
+        print(f"DEBUG: {event=}")
+
+
     def build_message(self, key: str, params: list[Any]) -> bytes:
         msg = f"{key}|{'|'.join(map(str, params))}".encode()
         print(f"[LOG] {msg!r}")
@@ -413,5 +447,5 @@ class Serveur:
         return [s.upper() for s in msg.split("|")]
 
 if __name__ ==  "__main__":
-    seed(10)
+    seed(7)
     Interface()
